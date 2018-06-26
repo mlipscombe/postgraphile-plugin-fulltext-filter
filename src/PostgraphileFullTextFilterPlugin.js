@@ -3,7 +3,7 @@ const { omit } = require('graphile-build-pg');
 
 const TSVECTOR_TYPE_ID = 3614;
 
-export const PostGraphileFulltextFilterPlugin = (builder) => {
+module.exports = function PostGraphileFulltextFilterPlugin(builder) {
   builder.hook('inflection', (inflection, build) =>
     build.extend(inflection, {
       fullTextScalarTypeName() {
