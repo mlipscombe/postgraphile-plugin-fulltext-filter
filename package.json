@@ -1,0 +1,88 @@
+{
+    "name": "postgraphile-plugin-fulltext-filter",
+    "version": "1.0.0.beta1",
+    "description": "Full text searching on tsvector fields for use with postgraphile-plugin-connection-filter",
+    "main": "index.js",
+    "repository": {
+      "url": "git+https://github.com/mlipscombe/postgraphile-plugin-fulltext-filter.git",
+      "type": "git"
+    },
+    "author": "Mark Lipscombe",
+    "license": "MIT",
+    "bugs": {
+      "url": "https://github.com/mlipscombe/postgraphile-plugin-fulltext-filter.git"
+    },
+    "scripts": {
+      "test": "jest"
+    },
+    "dependencies": {
+        "graphile-build-pg": "^4.0.0-beta.6",
+        "pg-tsquery": "^6.4.2"
+    },
+    "peerDependencies": {
+        "postgraphile-plugin-connection-filter": "^1.0.0.beta13",
+        "postgraphile": "^4.0.0-beta.8"
+    },
+    "devDependencies": {
+        "graphql": ">=0.9 <0.14",
+        "jest": "^20.0.4",
+        "pg": ">=6.1.0 <8",
+        "postgraphile-core": "^4.0.0-beta.8"
+    },
+    "files": [
+        "src"
+    ],
+    "eslintConfig": {
+      "parserOptions": {
+        "ecmaFeatures": {
+          "jsx": true
+        }
+      },
+      "extends": [
+        "airbnb-base"
+      ],
+      "env": {
+        "jest": true
+      },
+      "globals": {
+        "expect": false
+      },
+      "rules": {
+        "import/no-unresolved": 0,
+        "import/no-extraneous-dependencies": 0,
+        "import/extensions": 0,
+        "import/prefer-default-export": 0,
+        "max-len": 0,
+        "no-alert": 0,
+        "no-console": 0,
+        "no-plusplus": 0,
+        "no-restricted-globals": 0,
+        "no-return-assign": [
+          "error",
+          "except-parens"
+        ],
+        "no-underscore-dangle": [
+          "error",
+          {
+            "allow": [
+              "_id",
+              "_ensureIndex",
+              "_verifyEmailToken",
+              "_resetPasswordToken",
+              "_name",
+              "_selected"
+            ]
+          }
+        ],
+        "class-methods-use-this": 0,
+        "prefer-destructuring": [
+          "error",
+          {
+            "object": true,
+            "array": false
+          }
+        ]
+      }
+    }
+  }
+  
