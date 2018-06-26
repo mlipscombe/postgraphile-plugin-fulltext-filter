@@ -2,10 +2,6 @@ const tsquery = require('pg-tsquery');
 const { omit } = require('graphile-build-pg');
 
 const TSVECTOR_TYPE_ID = 3614;
-const tsquery = require('pg-tsquery');
-const { omit } = require('graphile-build-pg');
-
-const TSVECTOR_TYPE_ID = 3614;
 
 export const PostGraphileFulltextFilterPlugin = (builder) => {
   builder.hook('inflection', (inflection, build) =>
