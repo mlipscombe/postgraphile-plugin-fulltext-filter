@@ -8,8 +8,11 @@ This plugin implements a full text search operator for `tsvector` columns in Pos
 ### CLI
 
 ``` bash
-postgraphile --append-plugins `pwd`/path/to/postgraphile-plugin-connection-filter/index.js `pwd`/path/to/this/plugin/src/index.js
+postgraphile --append-plugins postgraphile-plugin-connection-filter,postgraphile-plugin-fulltext-filter
 ```
+
+See [here](https://www.graphile.org/postgraphile/extending/#loading-additional-plugins) for
+more information about loading plugins with PostGraphile.
 
 ### Library
 
