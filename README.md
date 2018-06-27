@@ -17,7 +17,7 @@ postgraphile --append-plugins `pwd`/path/to/postgraphile-plugin-connection-filte
 const express = require('express');
 const { postgraphile } = require('postgraphile');
 const PostGraphileConnectionFilterPlugin = require('postgraphile-plugin-connection-filter');
-const { PostGraphileFulltextFilterPlugin } = require('postgraphile-plugin-fulltext-filter');
+const PostGraphileFulltextFilterPlugin = require('postgraphile-plugin-fulltext-filter');
 
 const app = express();
 
