@@ -3,7 +3,12 @@ const { omit } = require('graphile-build-pg');
 
 const TSVECTOR_TYPE_ID = 3614;
 
-module.exports = function PostGraphileFulltextFilterPlugin(builder) {
+module.exports = function PostGraphileFulltextFilterPlugin(
+  builder,
+  {
+    connectionFilterOperatorNames = {},
+  } = {},
+) {
   builder.hook('inflection', (inflection, build) =>
     build.extend(inflection, {
       fullTextScalarTypeName() {
@@ -20,12 +25,13 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       },
     }));
 
-  builder.hook('build', (build) => {
+  builder.hook('init', (_, build) => {
     const {
+      newWithHooks,
       addConnectionFilterOperator,
-      addType,
+      connectionFilterTypesByTypeName,
       getTypeByName,
-      connectionFilterOperators,
+      connectionFilterOperatorsByFieldType,
       pgSql: sql,
       pgRegisterGqlTypeByTypeId: registerGqlTypeByTypeId,
       pgRegisterGqlInputTypeByTypeId: registerGqlInputTypeByTypeId,
@@ -75,24 +81,31 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       },
     );
 
-    const FullTextFilter = new GraphQLInputObjectType({
-      name: 'FullTextFilter',
-      description: 'A filter to be used against `FullText` fields.',
-      fields: () => {
-        const operator = connectionFilterOperators.matches;
-        return {
-          matches: {
-            description: operator.description,
-            type: operator.resolveType(getTypeByName(scalarName)),
-          },
-        };
-      },
-    }, {
-      isPgTSVFilterInputType: true,
-    });
-    addType(FullTextFilter);
+    const filterFieldName = inflection.filterFieldType(scalarName);
 
-    return build;
+    const FullTextFilter = newWithHooks(
+      GraphQLInputObjectType,
+      {
+        name: filterFieldName,
+        description: 'A filter to be used against `FullText` fields.',
+        fields: () => {
+          const operatorName = connectionFilterOperatorNames['matches'] || 'matches';
+          const operator = connectionFilterOperatorsByFieldType[scalarName][operatorName];
+          return {
+            matches: {
+              description: operator.description,
+              type: operator.resolveType(getTypeByName(scalarName)),
+            },
+          };
+        },
+      },
+      {
+        isPgTSVFilterInputType: true,
+      }
+    )
+    connectionFilterTypesByTypeName[filterFieldName] = FullTextFilter;
+
+    return (_, build);
   });
 
   builder.hook('GraphQLObjectType:fields', (fields, build, context) => {
