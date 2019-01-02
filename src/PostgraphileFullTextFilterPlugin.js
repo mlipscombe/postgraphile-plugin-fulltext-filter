@@ -9,41 +9,30 @@ module.exports = function PostGraphileFulltextFilterPlugin(
     connectionFilterOperatorNames = {},
   } = {},
 ) {
-  builder.hook('inflection', (inflection, build) =>
-    build.extend(inflection, {
-      fullTextScalarTypeName() {
-        return 'FullText';
-      },
-      pgTsvRank(fieldName) {
-        return this.camelCase(`${fieldName}-rank`);
-      },
-      pgTsvOrderByColumnRankEnum(table, attr, ascending) {
-        const columnName = attr.kind === 'procedure'
-          ? attr.name.substr(table.name.length + 1)
-          : this._columnName(attr, { skipRowId: true }); // eslint-disable-line no-underscore-dangle
-        return this.constantCase(`${columnName}_rank_${ascending ? 'asc' : 'desc'}`);
-      },
-    }));
+  builder.hook('inflection', (inflection, build) => build.extend(inflection, {
+    fullTextScalarTypeName() {
+      return 'FullText';
+    },
+    pgTsvRank(fieldName) {
+      return this.camelCase(`${fieldName}-rank`);
+    },
+    pgTsvOrderByColumnRankEnum(table, attr, ascending) {
+      const columnName = attr.kind === 'procedure'
+        ? attr.name.substr(table.name.length + 1)
+        : this._columnName(attr, { skipRowId: true }); // eslint-disable-line no-underscore-dangle
+      return this.constantCase(`${columnName}_rank_${ascending ? 'asc' : 'desc'}`);
+    },
+  }));
 
-  builder.hook('init', (_, build) => {
+  builder.hook('build', (build) => {
     const {
-      newWithHooks,
-      addConnectionFilterOperator,
-      connectionFilterTypesByTypeName,
-      getTypeByName,
-      connectionFilterOperatorsByFieldType,
-      pgSql: sql,
       pgRegisterGqlTypeByTypeId: registerGqlTypeByTypeId,
       pgRegisterGqlInputTypeByTypeId: registerGqlInputTypeByTypeId,
       graphql: {
-        GraphQLInputObjectType, GraphQLString, GraphQLScalarType,
+        GraphQLScalarType,
       },
       inflection,
     } = build;
-
-    if (!(addConnectionFilterOperator instanceof Function)) {
-      throw new Error('PostGraphileFulltextFilterPlugin requires PostGraphileConnectionFilterPlugin to be loaded before it.');
-    }
 
     const scalarName = inflection.fullTextScalarTypeName();
 
@@ -63,25 +52,47 @@ module.exports = function PostGraphileFulltextFilterPlugin(
     registerGqlTypeByTypeId(TSVECTOR_TYPE_ID, () => FullText);
     registerGqlInputTypeByTypeId(TSVECTOR_TYPE_ID, () => FullText);
 
+    return build;
+  });
+
+  builder.hook('init', (_, build) => {
+    const {
+      newWithHooks,
+      addConnectionFilterOperator,
+      connectionFilterTypesByTypeName,
+      connectionFilterOperatorsByFieldType,
+      pgSql: sql,
+      pgGetGqlInputTypeByTypeIdAndModifier: getGqlInputTypeByTypeIdAndModifier,
+      graphql: {
+        GraphQLInputObjectType, GraphQLString,
+      },
+      inflection,
+    } = build;
+
+    if (!(addConnectionFilterOperator instanceof Function)) {
+      throw new Error('PostGraphileFulltextFilterPlugin requires PostGraphileConnectionFilterPlugin to be loaded before it.');
+    }
+
+    const InputType = getGqlInputTypeByTypeIdAndModifier(TSVECTOR_TYPE_ID, null);
+
     addConnectionFilterOperator(
       'matches',
       'Performs a full text search on the field.',
       () => GraphQLString,
-      (identifier, val, fieldName, queryBuilder) => {
-        const tsQueryString = tsquery(val);
+      (identifier, val, input, fieldName, queryBuilder) => {
+        const tsQueryString = tsquery(input);
         queryBuilder.select(
-          sql.query`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`,
+          sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`,
           `__${fieldName}Rank`,
         );
         return sql.query`${identifier} @@ to_tsquery(${sql.value(tsQueryString)})`;
       },
       {
-        allowedFieldTypes: [scalarName],
-        resolveWithRawInput: true,
+        allowedFieldTypes: [InputType.name],
       },
     );
 
-    const filterFieldName = inflection.filterFieldType(scalarName);
+    const filterFieldName = inflection.filterFieldType(InputType.name);
 
     const FullTextFilter = newWithHooks(
       GraphQLInputObjectType,
@@ -89,20 +100,20 @@ module.exports = function PostGraphileFulltextFilterPlugin(
         name: filterFieldName,
         description: 'A filter to be used against `FullText` fields.',
         fields: () => {
-          const operatorName = connectionFilterOperatorNames['matches'] || 'matches';
-          const operator = connectionFilterOperatorsByFieldType[scalarName][operatorName];
+          const operatorName = connectionFilterOperatorNames.matches || 'matches';
+          const operator = connectionFilterOperatorsByFieldType[InputType.name][operatorName];
           return {
             matches: {
               description: operator.description,
-              type: operator.resolveType(getTypeByName(scalarName)),
+              type: operator.resolveType(InputType),
             },
           };
         },
       },
       {
         isPgTSVFilterInputType: true,
-      }
-    )
+      },
+    );
     connectionFilterTypesByTypeName[filterFieldName] = FullTextFilter;
 
     return (_, build);
@@ -111,9 +122,9 @@ module.exports = function PostGraphileFulltextFilterPlugin(
   builder.hook('GraphQLObjectType:fields', (fields, build, context) => {
     const {
       pgIntrospectionResultsByKind: introspectionResultsByKind,
-      pg2gql,
       graphql: { GraphQLFloat },
       pgColumnFilter,
+      pg2gql,
       inflection,
     } = build;
 
@@ -123,24 +134,22 @@ module.exports = function PostGraphileFulltextFilterPlugin(
     } = context;
 
     if (
-      !(isPgRowType || isPgCompoundType) ||
-      !table ||
-      table.kind !== 'class'
+      !(isPgRowType || isPgCompoundType)
+      || !table
+      || table.kind !== 'class'
     ) {
       return fields;
     }
 
     const tableType = introspectionResultsByKind.type
-      .filter(type =>
-        type.type === 'c' &&
-        type.namespaceId === table.namespaceId &&
-        type.classId === table.id)[0];
+      .filter(type => type.type === 'c'
+        && type.namespaceId === table.namespaceId
+        && type.classId === table.id)[0];
     if (!tableType) {
       throw new Error('Could not determine the type of this table.');
     }
 
-    const tsvColumns = introspectionResultsByKind.attribute
-      .filter(attr => attr.classId === table.id)
+    const tsvColumns = table.attributes
       .filter(attr => parseInt(attr.typeId, 10) === TSVECTOR_TYPE_ID)
       .filter(attr => pgColumnFilter(attr, build, context))
       .filter(attr => !omit(attr, 'filter'));
@@ -158,16 +167,35 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       return fields;
     }
 
-    const newRankField = (baseFieldName, rankFieldName) =>
-      fieldWithHooks(
-        rankFieldName,
-        {
+    const newRankField = (baseFieldName, rankFieldName) => fieldWithHooks(
+      rankFieldName,
+      ({ addDataGenerator }) => {
+        addDataGenerator(({ alias }) => ({
+          pgQuery: (queryBuilder) => {
+            const {
+              parentQueryBuilder: {
+                data: {
+                  select: parentSelectData,
+                },
+              },
+            } = queryBuilder;
+            const rankField = parentSelectData.find(sel => sel[1] === `__${rankFieldName}`);
+            queryBuilder.select(
+              rankField[0],
+              alias,
+            );
+          },
+        }));
+        return {
           description: `Full-text search ranking when filtered by \`${baseFieldName}\`.`,
           type: GraphQLFloat,
-          resolve: data => pg2gql(data[`__${baseFieldName}Rank`], GraphQLFloat),
-        },
-        {},
-      );
+          resolve: data => pg2gql(data[rankFieldName], GraphQLFloat),
+        };
+      },
+      {
+        isPgTSVRankField: true,
+      },
+    );
 
     const tsvFields = tsvColumns
       .reduce((memo, attr) => {
@@ -205,10 +233,9 @@ module.exports = function PostGraphileFulltextFilterPlugin(
     }
 
     const tableType = introspectionResultsByKind.type
-      .filter(type =>
-        type.type === 'c' &&
-        type.namespaceId === table.namespaceId &&
-        type.classId === table.id)[0];
+      .filter(type => type.type === 'c'
+        && type.namespaceId === table.namespaceId
+        && type.classId === table.id)[0];
     if (!tableType) {
       throw new Error('Could not determine the type of this table.');
     }
@@ -245,7 +272,8 @@ module.exports = function PostGraphileFulltextFilterPlugin(
           const descFieldName = inflection.pgTsvOrderByColumnRankEnum(table, attr, false);
 
           const findExpr = ({ queryBuilder }) => {
-            const expr = queryBuilder.data.select.filter(obj => obj[1] === `__${fieldName}Rank`);
+            const { data: { select } } = queryBuilder;
+            const expr = select.filter(obj => obj[1] === `__${fieldName}Rank`);
             return expr.length ? expr.shift()[0] : sql.fragment`1`;
           };
 

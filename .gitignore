@@ -17,3 +17,5 @@ yarn-error.log
 .idea/*
 *.swp
 .vscode
+
+.env
