@@ -43,6 +43,30 @@ test(
       const data = result.data.allJobs.nodes;
       expect(data).toHaveLength(2);
       data.map(n => expect(n.fullTextRank).not.toBeNull());
+
+      const bananaQuery = `
+        query {
+          allJobs(
+            filter: {
+              fullText: {
+                matches: "banana"
+              }
+            }
+          ) {
+            nodes {
+              id
+              name
+              fullTextRank
+            }
+          }
+        }
+      `;
+      const bananaResult = await graphql(schema, bananaQuery, null, { pgClient });
+      expect(bananaResult).not.toHaveProperty('errors');
+
+      const bananaData = bananaResult.data.allJobs.nodes;
+      expect(bananaData).toHaveLength(1);
+      bananaData.map(n => expect(n.fullTextRank).not.toBeNull());
     },
   }),
 );
