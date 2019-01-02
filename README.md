@@ -69,8 +69,10 @@ enum for the table.
 
 ``` graphql
 query {
-  allPosts(filter: {
-    fullText: { matches: 'foo -bar' },
+  allPosts(
+    filter: {
+      fullText: { matches: 'foo -bar' }
+    }
     orderBy: FULL_TEXT_RANK_DESC
   }) {
     ...
