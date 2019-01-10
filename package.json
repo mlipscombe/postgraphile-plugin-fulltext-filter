@@ -1,6 +1,6 @@
 {
   "name": "postgraphile-plugin-fulltext-filter",
-  "version": "1.0.0-beta.4",
+  "version": "1.0.0-beta.5",
   "description": "Full text searching on tsvector fields for use with postgraphile-plugin-connection-filter",
   "main": "index.js",
   "repository": {
@@ -17,13 +17,12 @@
     "lint": "eslint index.js src/**/*.js"
   },
   "dependencies": {
-    "graphile-build-pg": "^4.0.0-beta.6",
+    "graphile-build-pg": "^4.2.0",
     "pg-tsquery": "^6.4.2",
-    "postgraphile": "^4.0.0-beta.8",
     "postgraphile-plugin-connection-filter": "^1.0.0-beta.23"
   },
   "peerDependencies": {
-    "postgraphile": "^4.0.0-beta.8",
+    "postgraphile-core": "^4.2.0",
     "postgraphile-plugin-connection-filter": "^1.0.0-beta.23"
   },
   "devDependencies": {
@@ -34,7 +33,7 @@
     "jest": "^23.6.0",
     "jest-junit": "^5.2.0",
     "pg": ">=6.1.0 <8",
-    "postgraphile-core": "^4.0.0-beta.8"
+    "postgraphile-core": "^4.2.0"
   },
   "jest": {
     "testRegex": "__tests__/.*\\.test\\.js$",
@@ -77,8 +76,15 @@
         "error",
         {
           "allow": [
-            "_fields"
+            "_fields",
+            "__fts_ranks"
           ]
+        }
+      ],
+      "no-param-reassign": [
+        "error",
+        {
+          "props": false
         }
       ],
       "no-return-assign": [

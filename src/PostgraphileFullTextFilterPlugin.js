@@ -81,10 +81,8 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       () => GraphQLString,
       (identifier, val, input, fieldName, queryBuilder) => {
         const tsQueryString = tsquery(input);
-        queryBuilder.select(
-          sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`,
-          `__${fieldName}Rank`,
-        );
+        queryBuilder.__fts_ranks = queryBuilder.__fts_ranks || {};
+        queryBuilder.__fts_ranks[fieldName] = [identifier, tsQueryString];
         return sql.query`${identifier} @@ to_tsquery(${sql.value(tsQueryString)})`;
       },
       {
@@ -125,6 +123,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       graphql: { GraphQLFloat },
       pgColumnFilter,
       pg2gql,
+      pgSql: sql,
       inflection,
     } = build;
 
@@ -172,16 +171,19 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       ({ addDataGenerator }) => {
         addDataGenerator(({ alias }) => ({
           pgQuery: (queryBuilder) => {
-            const {
-              parentQueryBuilder: {
-                data: {
-                  select: parentSelectData,
-                },
-              },
-            } = queryBuilder;
-            const rankField = parentSelectData.find(sel => sel[1] === `__${rankFieldName}`);
+            const { parentQueryBuilder } = queryBuilder;
+            if (
+              !parentQueryBuilder
+              || !parentQueryBuilder.__fts_ranks
+              || !parentQueryBuilder.__fts_ranks[baseFieldName]) {
+              return;
+            }
+            const [
+              identifier,
+              tsQueryString,
+            ] = parentQueryBuilder.__fts_ranks[baseFieldName];
             queryBuilder.select(
-              rankField[0],
+              sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`,
               alias,
             );
           },
@@ -272,9 +274,14 @@ module.exports = function PostGraphileFulltextFilterPlugin(
           const descFieldName = inflection.pgTsvOrderByColumnRankEnum(table, attr, false);
 
           const findExpr = ({ queryBuilder }) => {
-            const { data: { select } } = queryBuilder;
-            const expr = select.filter(obj => obj[1] === `__${fieldName}Rank`);
-            return expr.length ? expr.shift()[0] : sql.fragment`1`;
+            if (!queryBuilder.__fts_ranks || !queryBuilder.__fts_ranks[fieldName]) {
+              return sql.fragment`1`;
+            }
+            const [
+              identifier,
+              tsQueryString,
+            ] = queryBuilder.__fts_ranks[fieldName];
+            return sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`;
           };
 
           memo[ascFieldName] = { // eslint-disable-line no-param-reassign
