@@ -1,8 +1,6 @@
 const tsquery = require('pg-tsquery');
 const { omit } = require('graphile-build-pg');
 
-const TSVECTOR_TYPE_ID = 3614;
-
 module.exports = function PostGraphileFulltextFilterPlugin(
   builder,
   {
@@ -26,6 +24,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
 
   builder.hook('build', (build) => {
     const {
+      pgIntrospectionResultsByKind: introspectionResultsByKind,
       pgRegisterGqlTypeByTypeId: registerGqlTypeByTypeId,
       pgRegisterGqlInputTypeByTypeId: registerGqlInputTypeByTypeId,
       graphql: {
@@ -34,9 +33,16 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       inflection,
     } = build;
 
+    const tsvectorType = introspectionResultsByKind.type.find(
+      t => t.name === 'tsvector',
+    );
+    if (!tsvectorType) {
+      throw new Error('Unable to find tsvector type through introspection.');
+    }
+
     const scalarName = inflection.fullTextScalarTypeName();
 
-    const FullText = new GraphQLScalarType({
+    const GraphQLFullTextType = new GraphQLScalarType({
       name: scalarName,
       serialize(value) {
         return value;
@@ -49,10 +55,12 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       },
     });
 
-    registerGqlTypeByTypeId(TSVECTOR_TYPE_ID, () => FullText);
-    registerGqlInputTypeByTypeId(TSVECTOR_TYPE_ID, () => FullText);
+    registerGqlTypeByTypeId(tsvectorType.id, () => GraphQLFullTextType);
+    registerGqlInputTypeByTypeId(tsvectorType.id, () => GraphQLFullTextType);
 
-    return build;
+    return build.extend(build, {
+      pgTsvType: tsvectorType,
+    });
   });
 
   builder.hook('init', (_, build) => {
@@ -67,13 +75,18 @@ module.exports = function PostGraphileFulltextFilterPlugin(
         GraphQLInputObjectType, GraphQLString,
       },
       inflection,
+      pgTsvType,
     } = build;
+
+    if (!pgTsvType) {
+      return build;
+    }
 
     if (!(addConnectionFilterOperator instanceof Function)) {
       throw new Error('PostGraphileFulltextFilterPlugin requires PostGraphileConnectionFilterPlugin to be loaded before it.');
     }
 
-    const InputType = getGqlInputTypeByTypeIdAndModifier(TSVECTOR_TYPE_ID, null);
+    const InputType = getGqlInputTypeByTypeIdAndModifier(pgTsvType.id, null);
 
     addConnectionFilterOperator(
       'matches',
@@ -125,6 +138,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       pg2gql,
       pgSql: sql,
       inflection,
+      pgTsvType,
     } = build;
 
     const {
@@ -136,6 +150,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       !(isPgRowType || isPgCompoundType)
       || !table
       || table.kind !== 'class'
+      || !pgTsvType
     ) {
       return fields;
     }
@@ -149,7 +164,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
     }
 
     const tsvColumns = table.attributes
-      .filter(attr => parseInt(attr.typeId, 10) === TSVECTOR_TYPE_ID)
+      .filter(attr => attr.typeId === pgTsvType.id)
       .filter(attr => pgColumnFilter(attr, build, context))
       .filter(attr => !omit(attr, 'filter'));
 
@@ -159,7 +174,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       .filter(proc => proc.name.startsWith(`${table.name}_`))
       .filter(proc => proc.argTypeIds.length > 0)
       .filter(proc => proc.argTypeIds[0] === tableType.id)
-      .filter(proc => parseInt(proc.returnTypeId, 10) === TSVECTOR_TYPE_ID)
+      .filter(proc => proc.returnTypeId === pgTsvType.id)
       .filter(proc => !omit(proc, 'filter'));
 
     if (tsvColumns.length === 0 && tsvProcs.length === 0) {
@@ -228,9 +243,17 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       pgColumnFilter,
       pgIntrospectionResultsByKind: introspectionResultsByKind,
       inflection,
+      pgTsvType,
     } = build;
-    const { scope: { isPgRowSortEnum, pgIntrospection: table } } = context;
-    if (!isPgRowSortEnum || !table || table.kind !== 'class') {
+
+    const {
+      scope: {
+        isPgRowSortEnum,
+        pgIntrospection: table,
+      },
+    } = context;
+
+    if (!isPgRowSortEnum || !table || table.kind !== 'class' || !pgTsvType) {
       return values;
     }
 
@@ -244,7 +267,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
 
     const tsvColumns = introspectionResultsByKind.attribute
       .filter(attr => attr.classId === table.id)
-      .filter(attr => parseInt(attr.typeId, 10) === TSVECTOR_TYPE_ID);
+      .filter(attr => attr.typeId === pgTsvType.id);
 
     const tsvProcs = introspectionResultsByKind.procedure
       .filter(proc => proc.isStable)
@@ -252,7 +275,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
       .filter(proc => proc.name.startsWith(`${table.name}_`))
       .filter(proc => proc.argTypeIds.length === 1)
       .filter(proc => proc.argTypeIds[0] === tableType.id)
-      .filter(proc => parseInt(proc.returnTypeId, 10) === TSVECTOR_TYPE_ID)
+      .filter(proc => proc.returnTypeId === pgTsvType.id)
       .filter(proc => !omit(proc, 'order'));
 
 
