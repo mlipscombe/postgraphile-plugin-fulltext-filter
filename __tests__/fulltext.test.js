@@ -326,3 +326,65 @@ test(
     },
   }),
 );
+
+test(
+  'works with connectionFilterRelations with no local filter',
+  withSchema({
+    options: {
+      graphileBuildOptions: {
+        connectionFilterRelations: true,
+      },
+    },
+    setup: `
+      create table fulltext_test.clients (
+        id serial primary key,
+        comment text,
+        tsv tsvector
+      );
+      
+      create table fulltext_test.orders (
+        id serial primary key,
+        client_id integer references fulltext_test.clients (id),
+        comment text,
+        tsv tsvector
+      );
+      
+      insert into fulltext_test.clients (id, comment, tsv) values
+        (1, 'Client A', tsvector('fruit apple')),
+        (2, 'Client Z', tsvector('fruit avocado'));
+      
+      insert into fulltext_test.orders (id, client_id, comment, tsv) values
+        (1, 1, 'X', tsvector('fruit apple')),
+        (2, 1, 'Y', tsvector('fruit pear apple')),
+        (3, 1, 'Z', tsvector('vegetable potato')),
+        (4, 2, 'X', tsvector('fruit apple')),
+        (5, 2, 'Y', tsvector('fruit tomato')),
+        (6, 2, 'Z', tsvector('vegetable'));
+    `,
+    test: async ({ schema, pgClient }) => {
+      const query = `
+        query {
+          allOrders(filter: {
+            clientByClientId: { tsv: { matches: "avocado" } }
+          }) {
+            nodes {
+              id
+              comment
+              tsv
+              clientByClientId {
+                id
+                comment
+                tsv
+              }
+            }
+          }
+        }
+      `;
+      expect(schema).toMatchSnapshot();
+
+      const result = await graphql(schema, query, null, { pgClient });
+      expect(result).not.toHaveProperty('errors');
+      expect(result.data.allOrders.nodes).toHaveLength(3);
+    },
+  }),
+);
