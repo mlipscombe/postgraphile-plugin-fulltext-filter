@@ -16,7 +16,7 @@ GraphQLSchema {
     ],
   },
   "_mutationType": "Mutation",
-  "_possibleTypeMap": undefined,
+  "_possibleTypeMap": Object {},
   "_queryType": "Query",
   "_subscriptionType": undefined,
   "_typeMap": Object {
@@ -80,7 +80,7 @@ GraphQLSchema {
     ],
   },
   "_mutationType": "Mutation",
-  "_possibleTypeMap": undefined,
+  "_possibleTypeMap": Object {},
   "_queryType": "Query",
   "_subscriptionType": undefined,
   "_typeMap": Object {
@@ -144,7 +144,7 @@ GraphQLSchema {
     ],
   },
   "_mutationType": "Mutation",
-  "_possibleTypeMap": undefined,
+  "_possibleTypeMap": Object {},
   "_queryType": "Query",
   "_subscriptionType": undefined,
   "_typeMap": Object {
@@ -208,7 +208,7 @@ GraphQLSchema {
     ],
   },
   "_mutationType": "Mutation",
-  "_possibleTypeMap": undefined,
+  "_possibleTypeMap": Object {},
   "_queryType": "Query",
   "_subscriptionType": undefined,
   "_typeMap": Object {
@@ -272,7 +272,7 @@ GraphQLSchema {
     ],
   },
   "_mutationType": "Mutation",
-  "_possibleTypeMap": undefined,
+  "_possibleTypeMap": Object {},
   "_queryType": "Query",
   "_subscriptionType": undefined,
   "_typeMap": Object {
@@ -337,7 +337,7 @@ GraphQLSchema {
     ],
   },
   "_mutationType": "Mutation",
-  "_possibleTypeMap": undefined,
+  "_possibleTypeMap": Object {},
   "_queryType": "Query",
   "_subscriptionType": undefined,
   "_typeMap": Object {
@@ -372,6 +372,7 @@ GraphQLSchema {
     "Order": "Order",
     "OrderCondition": "OrderCondition",
     "OrderFilter": "OrderFilter",
+    "OrderFilterMany": "OrderFilterMany",
     "OrderInput": "OrderInput",
     "OrderPatch": "OrderPatch",
     "OrdersConnection": "OrdersConnection",
