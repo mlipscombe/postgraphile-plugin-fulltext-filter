@@ -65,16 +65,12 @@ module.exports = function PostGraphileFulltextFilterPlugin(
 
   builder.hook('init', (_, build) => {
     const {
-      newWithHooks,
       addConnectionFilterOperator,
-      connectionFilterTypesByTypeName,
-      connectionFilterOperatorsByFieldType,
       pgSql: sql,
       pgGetGqlInputTypeByTypeIdAndModifier: getGqlInputTypeByTypeIdAndModifier,
       graphql: {
-        GraphQLInputObjectType, GraphQLString,
+        GraphQLString,
       },
-      inflection,
       pgTsvType,
     } = build;
 
@@ -89,7 +85,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
     const InputType = getGqlInputTypeByTypeIdAndModifier(pgTsvType.id, null);
 
     addConnectionFilterOperator(
-      'matches',
+      connectionFilterOperatorNames.matches || 'matches',
       'Performs a full text search on the field.',
       () => GraphQLString,
       (identifier, val, input, fieldName, queryBuilder) => {
@@ -102,30 +98,6 @@ module.exports = function PostGraphileFulltextFilterPlugin(
         allowedFieldTypes: [InputType.name],
       },
     );
-
-    const filterFieldName = inflection.filterFieldType(InputType.name);
-
-    const FullTextFilter = newWithHooks(
-      GraphQLInputObjectType,
-      {
-        name: filterFieldName,
-        description: 'A filter to be used against `FullText` fields.',
-        fields: () => {
-          const operatorName = connectionFilterOperatorNames.matches || 'matches';
-          const operator = connectionFilterOperatorsByFieldType[InputType.name][operatorName];
-          return {
-            matches: {
-              description: operator.description,
-              type: operator.resolveType(InputType),
-            },
-          };
-        },
-      },
-      {
-        isPgTSVFilterInputType: true,
-      },
-    );
-    connectionFilterTypesByTypeName[filterFieldName] = FullTextFilter;
 
     return (_, build);
   });
