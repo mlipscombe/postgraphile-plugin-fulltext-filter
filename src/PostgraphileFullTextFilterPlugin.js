@@ -1,12 +1,7 @@
 const tsquery = require('pg-tsquery');
 const { omit } = require('graphile-build-pg');
 
-module.exports = function PostGraphileFulltextFilterPlugin(
-  builder,
-  {
-    connectionFilterOperatorNames = {},
-  } = {},
-) {
+module.exports = function PostGraphileFulltextFilterPlugin(builder) {
   builder.hook('inflection', (inflection, build) => build.extend(inflection, {
     fullTextScalarTypeName() {
       return 'FullText';
@@ -85,7 +80,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(
     const InputType = getGqlInputTypeByTypeIdAndModifier(pgTsvType.id, null);
 
     addConnectionFilterOperator(
-      connectionFilterOperatorNames.matches || 'matches',
+      'matches',
       'Performs a full text search on the field.',
       () => GraphQLString,
       (identifier, val, input, fieldName, queryBuilder) => {
