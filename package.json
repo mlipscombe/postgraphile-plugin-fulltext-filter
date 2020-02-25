@@ -13,7 +13,7 @@
     "url": "https://github.com/mlipscombe/postgraphile-plugin-fulltext-filter.git"
   },
   "scripts": {
-    "test": "scripts/test jest -i",
+    "test": "TEST_DATABASE_URL=postgres://username:super-secret-password@127.0.0.1:5432/test scripts/test jest --watch -i",
     "lint": "eslint index.js src/**/*.js"
   },
   "dependencies": {
