@@ -52,7 +52,7 @@ test(
           allJobs(
             filter: {
               fullText: {
-                matches: "fruit"
+                matches: { value: "fruit" }
               }
             }
             orderBy: [
@@ -81,7 +81,7 @@ test(
           allJobs(
             filter: {
               fullText: {
-                matches: "banana"
+                matches: { value: "banana" }
               }
             }
           ) {
@@ -160,10 +160,10 @@ test(
           allJobs(
             filter: {
               fullText: {
-                matches: "fruit"
+                matches: { value: "fruit" }
               }
               otherFullText: {
-                matches: "vegetable"
+                matches: { value: "vegetable" }
               }
             }
             orderBy: [
@@ -195,7 +195,7 @@ test(
           allJobs(
             filter: {
               otherFullText: {
-                matches: "potato"
+                matches: { value: "potato" }
               }
             }
           ) {
@@ -238,7 +238,7 @@ test(
           allJobs(
             filter: {
               fullText: {
-                matches: "fruit | banana"
+                matches: { value: "fruit | banana" }
               }
             }
             orderBy: $orderBy
@@ -304,7 +304,7 @@ test(
           allOrders(filter: {
             or: [
               { comment: { includes: "Z"} },
-              { clientByClientId: { tsv: { matches: "apple" } } }
+              { clientByClientId: { tsv: { matches: { value: "apple" } } } }
             ]
           }) {
             nodes {
@@ -365,7 +365,7 @@ test(
       const query = `
         query {
           allOrders(filter: {
-            clientByClientId: { tsv: { matches: "avocado" } }
+            clientByClientId: { tsv: { matches: { value: "avocado" } } }
           }) {
             nodes {
               id
