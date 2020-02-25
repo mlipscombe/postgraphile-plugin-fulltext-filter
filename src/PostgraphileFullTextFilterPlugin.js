@@ -64,7 +64,8 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       pgSql: sql,
       pgGetGqlInputTypeByTypeIdAndModifier: getGqlInputTypeByTypeIdAndModifier,
       graphql: {
-        GraphQLString,
+        GraphQLInputObjectType,
+        GraphQLString
       },
       pgTsvType,
     } = build;
@@ -79,14 +80,26 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
 
     const InputType = getGqlInputTypeByTypeIdAndModifier(pgTsvType.id, null);
 
+    const MatchInput = new GraphQLInputObjectType({
+      name: 'MatchInput',
+      fields: () => ({
+        value:       { type: GraphQLString },
+        language:    { type: GraphQLString }, 
+      })
+    });
+
     addConnectionFilterOperator(
       'matches',
       'Performs a full text search on the field.',
-      () => GraphQLString,
+      () => MatchInput,
       (identifier, val, input, fieldName, queryBuilder) => {
-        const tsQueryString = tsquery(input);
+        const language = input.language;
+        const tsQueryString = tsquery(input.value);
         queryBuilder.__fts_ranks = queryBuilder.__fts_ranks || {};
-        queryBuilder.__fts_ranks[fieldName] = [identifier, tsQueryString];
+        queryBuilder.__fts_ranks[fieldName] = [identifier, tsQueryString, language];
+        if (language) {
+          return sql.query`${identifier} @@ to_tsquery(${sql.value(language)}, ${sql.value(tsQueryString)})`;
+        }
         return sql.query`${identifier} @@ to_tsquery(${sql.value(tsQueryString)})`;
       },
       {
@@ -163,11 +176,20 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
             const [
               identifier,
               tsQueryString,
+              language
             ] = parentQueryBuilder.__fts_ranks[baseFieldName];
-            queryBuilder.select(
-              sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`,
-              alias,
-            );
+
+            if (language) {
+              queryBuilder.select(
+                sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(language)}, ${sql.value(tsQueryString)}))`,
+                alias,
+              );
+            } else {
+              queryBuilder.select(
+                sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`,
+                alias,
+              );              
+            }
           },
         }));
         return {
@@ -270,7 +292,11 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
             const [
               identifier,
               tsQueryString,
+              language
             ] = queryBuilder.__fts_ranks[fieldName];
+            if(language){
+              return sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(language)}, ${sql.value(tsQueryString)}))`;
+            }
             return sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`;
           };
 
