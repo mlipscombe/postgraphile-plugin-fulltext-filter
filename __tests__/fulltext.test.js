@@ -52,7 +52,7 @@ test(
           allJobs(
             filter: {
               fullText: {
-                matches: "fruit"
+                matches: { value: "fruit" }
               }
             }
             orderBy: [
@@ -81,7 +81,7 @@ test(
           allJobs(
             filter: {
               fullText: {
-                matches: "banana"
+                matches: { value: "banana" }
               }
             }
           ) {
@@ -141,7 +141,7 @@ test(
 );
 
 test(
-  'fulltext search field is created',
+  'fulltext search field is created and working with language',
   withSchema({
     setup: `
       create table fulltext_test.job (
@@ -151,8 +151,8 @@ test(
         other_full_text tsvector
       );
       insert into fulltext_test.job (name, full_text, other_full_text) values 
-        ('test', to_tsvector('apple fruit'), to_tsvector('vegetable potato')), 
-        ('test 2', to_tsvector('banana fruit'), to_tsvector('vegetable pumpkin'));
+        ('test', to_tsvector('italian', 'apple fruit'), to_tsvector('italian', 'vegetable potato')), 
+        ('test 2', to_tsvector('italian', 'banana fruit'), to_tsvector('italian', 'vegetable pumpkin'));
     `,
     test: async ({ schema, pgClient }) => {
       const query = `
@@ -160,10 +160,10 @@ test(
           allJobs(
             filter: {
               fullText: {
-                matches: "fruit"
+                matches: { language: "italian", value: "fruit" }
               }
               otherFullText: {
-                matches: "vegetable"
+                matches: { language: "italian", value: "vegetable" }
               }
             }
             orderBy: [
@@ -195,7 +195,85 @@ test(
           allJobs(
             filter: {
               otherFullText: {
-                matches: "potato"
+                matches: { language: "italian", value: "potato" }
+              }
+            }
+          ) {
+            nodes {
+              id
+              name
+              fullTextRank
+              otherFullTextRank
+            }
+          }
+        }
+      `;
+      const potatoResult = await graphql(schema, potatoQuery, null, { pgClient });
+      expect(potatoResult).not.toHaveProperty('errors');
+
+      const potatoData = potatoResult.data.allJobs.nodes;
+      expect(potatoData).toHaveLength(1);
+      potatoData.map(n => expect(n.fullTextRank).toBeNull());
+      potatoData.map(n => expect(n.otherFullTextRank).not.toBeNull());
+    },
+  }),
+);
+test(
+  'fulltext search field is created',
+  withSchema({
+    setup: `
+      create table fulltext_test.job (
+        id serial primary key,
+        name text not null,
+        full_text tsvector,
+        other_full_text tsvector
+      );
+      insert into fulltext_test.job (name, full_text, other_full_text) values 
+        ('test', to_tsvector('apple fruit'), to_tsvector('vegetable potato')), 
+        ('test 2', to_tsvector('banana fruit'), to_tsvector('vegetable pumpkin'));
+    `,
+    test: async ({ schema, pgClient }) => {
+      const query = `
+        query {
+          allJobs(
+            filter: {
+              fullText: {
+                matches: { value: "fruit" }
+              }
+              otherFullText: {
+                matches: { value: "vegetable" }
+              }
+            }
+            orderBy: [
+              FULL_TEXT_RANK_ASC
+              OTHER_FULL_TEXT_DESC
+            ]
+          ) {
+            nodes {
+              id
+              name
+              fullTextRank
+              otherFullTextRank
+            }
+          }
+        }
+      `;
+      expect(schema).toMatchSnapshot();
+
+      const result = await graphql(schema, query, null, { pgClient });
+      expect(result).not.toHaveProperty('errors');
+
+      const data = result.data.allJobs.nodes;
+      expect(data).toHaveLength(2);
+      data.map(n => expect(n.fullTextRank).not.toBeNull());
+      data.map(n => expect(n.otherFullTextRank).not.toBeNull());
+
+      const potatoQuery = `
+        query {
+          allJobs(
+            filter: {
+              otherFullText: {
+                matches: { value: "potato" }
               }
             }
           ) {
@@ -238,7 +316,7 @@ test(
           allJobs(
             filter: {
               fullText: {
-                matches: "fruit | banana"
+                matches: { value: "fruit | banana" }
               }
             }
             orderBy: $orderBy
@@ -304,7 +382,7 @@ test(
           allOrders(filter: {
             or: [
               { comment: { includes: "Z"} },
-              { clientByClientId: { tsv: { matches: "apple" } } }
+              { clientByClientId: { tsv: { matches: { value: "apple" } } } }
             ]
           }) {
             nodes {
@@ -348,7 +426,7 @@ test(
         comment text,
         tsv tsvector
       );
-      
+
       insert into fulltext_test.clients (id, comment, tsv) values
         (1, 'Client A', tsvector('fruit apple')),
         (2, 'Client Z', tsvector('fruit avocado'));
@@ -365,7 +443,7 @@ test(
       const query = `
         query {
           allOrders(filter: {
-            clientByClientId: { tsv: { matches: "avocado" } }
+            clientByClientId: { tsv: { matches: { value: "avocado" } } }
           }) {
             nodes {
               id

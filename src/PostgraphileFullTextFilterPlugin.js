@@ -13,7 +13,9 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       const columnName = attr.kind === 'procedure'
         ? attr.name.substr(table.name.length + 1)
         : this._columnName(attr, { skipRowId: true }); // eslint-disable-line no-underscore-dangle
-      return this.constantCase(`${columnName}_rank_${ascending ? 'asc' : 'desc'}`);
+      return this.constantCase(
+        `${columnName}_rank_${ascending ? 'asc' : 'desc'}`,
+      );
     },
   }));
 
@@ -22,9 +24,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       pgIntrospectionResultsByKind: introspectionResultsByKind,
       pgRegisterGqlTypeByTypeId: registerGqlTypeByTypeId,
       pgRegisterGqlInputTypeByTypeId: registerGqlInputTypeByTypeId,
-      graphql: {
-        GraphQLScalarType,
-      },
+      graphql: { GraphQLScalarType },
       inflection,
     } = build;
 
@@ -63,9 +63,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       addConnectionFilterOperator,
       pgSql: sql,
       pgGetGqlInputTypeByTypeIdAndModifier: getGqlInputTypeByTypeIdAndModifier,
-      graphql: {
-        GraphQLString,
-      },
+      graphql: { GraphQLInputObjectType, GraphQLString },
       pgTsvType,
     } = build;
 
@@ -74,27 +72,49 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
     }
 
     if (!(addConnectionFilterOperator instanceof Function)) {
-      throw new Error('PostGraphileFulltextFilterPlugin requires PostGraphileConnectionFilterPlugin to be loaded before it.');
+      throw new Error(
+        'PostGraphileFulltextFilterPlugin requires PostGraphileConnectionFilterPlugin to be loaded before it.',
+      );
     }
 
     const InputType = getGqlInputTypeByTypeIdAndModifier(pgTsvType.id, null);
 
+    const MatchInput = new GraphQLInputObjectType({
+      name: 'MatchInput',
+      fields: () => ({
+        value: { type: GraphQLString },
+        language: { type: GraphQLString },
+      }),
+    });
+
     addConnectionFilterOperator(
       'matches',
       'Performs a full text search on the field.',
-      () => GraphQLString,
+      () => MatchInput,
       (identifier, val, input, fieldName, queryBuilder) => {
-        const tsQueryString = tsquery(input);
+        const { language } = input;
+        const tsQueryString = tsquery(input.value);
         queryBuilder.__fts_ranks = queryBuilder.__fts_ranks || {};
-        queryBuilder.__fts_ranks[fieldName] = [identifier, tsQueryString];
-        return sql.query`${identifier} @@ to_tsquery(${sql.value(tsQueryString)})`;
+        queryBuilder.__fts_ranks[fieldName] = [
+          identifier,
+          tsQueryString,
+          language,
+        ];
+        if (language) {
+          return sql.query`${identifier} @@ to_tsquery(${sql.value(
+            language,
+          )}, ${sql.value(tsQueryString)})`;
+        }
+        return sql.query`${identifier} @@ to_tsquery(${sql.value(
+          tsQueryString,
+        )})`;
       },
       {
         allowedFieldTypes: [InputType.name],
       },
     );
 
-    return (_, build);
+    return _, build;
   });
 
   builder.hook('GraphQLObjectType:fields', (fields, build, context) => {
@@ -122,10 +142,11 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       return fields;
     }
 
-    const tableType = introspectionResultsByKind.type
-      .filter(type => type.type === 'c'
+    const tableType = introspectionResultsByKind.type.filter(
+      type => type.type === 'c'
         && type.namespaceId === table.namespaceId
-        && type.classId === table.id)[0];
+        && type.classId === table.id,
+    )[0];
     if (!tableType) {
       throw new Error('Could not determine the type of this table.');
     }
@@ -156,18 +177,32 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
             const { parentQueryBuilder } = queryBuilder;
             if (
               !parentQueryBuilder
-              || !parentQueryBuilder.__fts_ranks
-              || !parentQueryBuilder.__fts_ranks[baseFieldName]) {
+                || !parentQueryBuilder.__fts_ranks
+                || !parentQueryBuilder.__fts_ranks[baseFieldName]
+            ) {
               return;
             }
             const [
               identifier,
               tsQueryString,
+              language,
             ] = parentQueryBuilder.__fts_ranks[baseFieldName];
-            queryBuilder.select(
-              sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`,
-              alias,
-            );
+
+            if (language) {
+              queryBuilder.select(
+                sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(
+                  language,
+                )}, ${sql.value(tsQueryString)}))`,
+                alias,
+              );
+            } else {
+              queryBuilder.select(
+                sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(
+                  tsQueryString,
+                )}))`,
+                alias,
+              );
+            }
           },
         }));
         return {
@@ -181,24 +216,26 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       },
     );
 
-    const tsvFields = tsvColumns
-      .reduce((memo, attr) => {
-        const fieldName = inflection.column(attr);
-        const rankFieldName = inflection.pgTsvRank(fieldName);
-        memo[rankFieldName] = newRankField(fieldName, rankFieldName); // eslint-disable-line no-param-reassign
+    const tsvFields = tsvColumns.reduce((memo, attr) => {
+      const fieldName = inflection.column(attr);
+      const rankFieldName = inflection.pgTsvRank(fieldName);
+      memo[rankFieldName] = newRankField(fieldName, rankFieldName); // eslint-disable-line no-param-reassign
 
-        return memo;
-      }, {});
+      return memo;
+    }, {});
 
-    const tsvProcFields = tsvProcs
-      .reduce((memo, proc) => {
-        const psuedoColumnName = proc.name.substr(table.name.length + 1);
-        const fieldName = inflection.computedColumn(psuedoColumnName, proc, table);
-        const rankFieldName = inflection.pgTsvRank(fieldName);
-        memo[rankFieldName] = newRankField(fieldName, rankFieldName); // eslint-disable-line no-param-reassign
+    const tsvProcFields = tsvProcs.reduce((memo, proc) => {
+      const psuedoColumnName = proc.name.substr(table.name.length + 1);
+      const fieldName = inflection.computedColumn(
+        psuedoColumnName,
+        proc,
+        table,
+      );
+      const rankFieldName = inflection.pgTsvRank(fieldName);
+      memo[rankFieldName] = newRankField(fieldName, rankFieldName); // eslint-disable-line no-param-reassign
 
-        return memo;
-      }, {});
+      return memo;
+    }, {});
 
     return Object.assign({}, fields, tsvFields, tsvProcFields);
   });
@@ -214,20 +251,18 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
     } = build;
 
     const {
-      scope: {
-        isPgRowSortEnum,
-        pgIntrospection: table,
-      },
+      scope: { isPgRowSortEnum, pgIntrospection: table },
     } = context;
 
     if (!isPgRowSortEnum || !table || table.kind !== 'class' || !pgTsvType) {
       return values;
     }
 
-    const tableType = introspectionResultsByKind.type
-      .filter(type => type.type === 'c'
+    const tableType = introspectionResultsByKind.type.filter(
+      type => type.type === 'c'
         && type.namespaceId === table.namespaceId
-        && type.classId === table.id)[0];
+        && type.classId === table.id,
+    )[0];
     if (!tableType) {
       throw new Error('Could not determine the type of this table.');
     }
@@ -245,7 +280,6 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
       .filter(proc => proc.returnTypeId === pgTsvType.id)
       .filter(proc => !omit(proc, 'order'));
 
-
     if (tsvColumns.length === 0 && tsvProcs.length === 0) {
       return values;
     }
@@ -258,29 +292,54 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
         .filter(attr => !omit(attr, 'order'))
         .reduce((memo, attr) => {
           const fieldName = attr.kind === 'procedure'
-            ? inflection.computedColumn(attr.name.substr(table.name.length + 1), attr, table)
+            ? inflection.computedColumn(
+              attr.name.substr(table.name.length + 1),
+              attr,
+              table,
+            )
             : inflection.column(attr);
-          const ascFieldName = inflection.pgTsvOrderByColumnRankEnum(table, attr, true);
-          const descFieldName = inflection.pgTsvOrderByColumnRankEnum(table, attr, false);
+          const ascFieldName = inflection.pgTsvOrderByColumnRankEnum(
+            table,
+            attr,
+            true,
+          );
+          const descFieldName = inflection.pgTsvOrderByColumnRankEnum(
+            table,
+            attr,
+            false,
+          );
 
           const findExpr = ({ queryBuilder }) => {
-            if (!queryBuilder.__fts_ranks || !queryBuilder.__fts_ranks[fieldName]) {
+            if (
+              !queryBuilder.__fts_ranks
+              || !queryBuilder.__fts_ranks[fieldName]
+            ) {
               return sql.fragment`1`;
             }
             const [
               identifier,
               tsQueryString,
+              language,
             ] = queryBuilder.__fts_ranks[fieldName];
-            return sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(tsQueryString)}))`;
+            if (language) {
+              return sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(
+                language,
+              )}, ${sql.value(tsQueryString)}))`;
+            }
+            return sql.fragment`ts_rank(${identifier}, to_tsquery(${sql.value(
+              tsQueryString,
+            )}))`;
           };
 
-          memo[ascFieldName] = { // eslint-disable-line no-param-reassign
+          memo[ascFieldName] = {
+            // eslint-disable-line no-param-reassign
             value: {
               alias: `${ascFieldName.toLowerCase()}`,
               specs: [[findExpr, true]],
             },
           };
-          memo[descFieldName] = { // eslint-disable-line no-param-reassign
+          memo[descFieldName] = {
+            // eslint-disable-line no-param-reassign
             value: {
               alias: `${descFieldName.toLowerCase()}`,
               specs: [[findExpr, false]],
