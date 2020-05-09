@@ -80,6 +80,7 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
     const InputType = getGqlInputTypeByTypeIdAndModifier(pgTsvType.id, null);
 
     addConnectionFilterOperator(
+      [InputType.name],
       'matches',
       'Performs a full text search on the field.',
       () => GraphQLString,
@@ -88,9 +89,6 @@ module.exports = function PostGraphileFulltextFilterPlugin(builder) {
         queryBuilder.__fts_ranks = queryBuilder.__fts_ranks || {};
         queryBuilder.__fts_ranks[fieldName] = [identifier, tsQueryString];
         return sql.query`${identifier} @@ to_tsquery(${sql.value(tsQueryString)})`;
-      },
-      {
-        allowedFieldTypes: [InputType.name],
       },
     );
 
